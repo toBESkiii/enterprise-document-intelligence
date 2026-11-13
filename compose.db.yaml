@@ -1,0 +1,23 @@
+name: enterprise-document-intelligence-db
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg17-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: document_intelligence
+      POSTGRES_USER: edi_admin
+      POSTGRES_PASSWORD: ${EDI_DB_PASSWORD:?Set EDI_DB_PASSWORD in .env.db}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - edi_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "edi_admin", "-d", "document_intelligence"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  edi_pgdata:
