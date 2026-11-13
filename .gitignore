@@ -1,0 +1,43 @@
+# Secrets and private settings
+.env
+.env.*
+*.env
+.streamlit/secrets*.toml
+
+# Python environment and temporary files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Local documents and generated data
+/data/
+*.pdf
+
+# Downloaded models, saved vectors and caches
+/models/
+/.cache/
+/.ollama/
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.bin
+*.npy
+*.npz
+
+# Local logs and database backups
+*.log
+*.dump
+*.backup
+*.db
+*.sqlite
+*.sqlite3
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

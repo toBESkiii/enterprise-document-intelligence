@@ -1,0 +1,19 @@
+# Main dependencies reported from the working Windows / Python 3.11.5 environment.
+# This is not a complete dependency lockfile or a validated cloud deployment file.
+
+# PDF reading
+pypdf==6.10.0
+
+# Embeddings and model tokenisation
+numpy==2.4.6
+torch==2.14.1
+transformers==5.21.0
+sentence-transformers==6.2.0
+
+# Keyword retrieval and PostgreSQL
+rank-bm25==0.2.2
+psycopg[binary]==3.3.8
+python-dotenv==1.2.4
+
+# User interface
+streamlit==1.67.0
