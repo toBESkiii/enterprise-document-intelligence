@@ -1,6 +1,7 @@
 """Database-backed hybrid Q&A; reuse answer handling from document_qa.py.
 
 This version uses the fixed imported collection. Restart it after database edits.
+Pass a connection factory to use Neon; the default remains local PostgreSQL.
 """
 
 import argparse
@@ -36,9 +37,10 @@ def connect_database():
 
 
 class PostgresDocumentQA(base.DocumentQA):
-    def __init__(self):
+    def __init__(self, connection_factory=None):
+        self._connect = connect_database if connection_factory is None else connection_factory
         # Do not call the file-based constructor: load passage text from SQL.
-        with connect_database() as connection:
+        with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT chunk_id, document_name, page_number, chunk_text,
@@ -66,8 +68,14 @@ class PostgresDocumentQA(base.DocumentQA):
         self.token_sets = [set(t) for t in tokens]
         # Keep BM25 statistics over the same full collection as before.
         self.bm25 = base.BM25Okapi(tokens, k1=1.5, b=0.75)
+        allow_downloads = os.environ.get(
+            "EDI_ALLOW_MODEL_DOWNLOADS", "0"
+        ) == "1"
+
         self.model = base.SentenceTransformer(
-            base.EMBEDDING_MODEL, device="cpu", local_files_only=True,
+            base.EMBEDDING_MODEL,
+            device="cpu",
+            local_files_only=not allow_downloads,
         )
         self.tokenizer = None
         self.ollama_url = os.environ.get(
@@ -77,7 +85,7 @@ class PostgresDocumentQA(base.DocumentQA):
 
     def _vector_ranking(self, vector, document, eligible):
         eligible_rows = np.flatnonzero(eligible).tolist()
-        with connect_database() as connection:
+        with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("""
                     SELECT embedding_row, chunk_id,
@@ -109,6 +117,7 @@ class PostgresDocumentQA(base.DocumentQA):
         return np.asarray(ranking, dtype=int), scores
 
     def search(self, question, document):
+        """Search one PDF, or the whole collection when document is None."""
         if not isinstance(question, str) or not question.strip():
             raise ValueError("Please enter a question.")
         question = question.strip()

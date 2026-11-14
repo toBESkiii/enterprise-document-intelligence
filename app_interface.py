@@ -1,4 +1,4 @@
-"""Local Streamlit interface for document overviews and source-based Q&A."""
+"""Streamlit interface using Neon search and Groq-hosted source-based answers."""
 
 import streamlit as st
 
@@ -8,9 +8,9 @@ st.set_page_config(page_title="Unilever Document Intelligence", layout="wide")
 
 @st.cache_resource(show_spinner=False)
 def load_engine():
-    # Load the existing search and answering system only when it is needed.
-    from document_qa_postgres import PostgresDocumentQA
-    return PostgresDocumentQA()
+    # Load cloud-connected search and answering only when a question is submitted.
+    from document_qa_groq import GroqDocumentQA
+    return GroqDocumentQA()
 
 
 # These names must match the document names stored in PostgreSQL.
@@ -34,7 +34,7 @@ PREPARED_OVERVIEW_NOTE = (
 )
 
 # Prepared display text, suggested questions and PDF page counts.
-# Opening an overview does not call Qwen or search the database.
+# Opening an overview does not call Groq or search the database.
 DOCUMENTS = {
     "UL01": {
         "title": "Annual Report 2025",
@@ -285,6 +285,11 @@ for key, default in {
     if key not in st.session_state:
         st.session_state[key] = default
 
+# Do not keep an old local-model answer after switching the answering backend.
+if st.session_state.get("edi_backend_version") != "neon-groq-v1":
+    st.session_state.edi_submission = None
+    st.session_state.edi_backend_version = "neon-groq-v1"
+
 
 def select_document(document_id):
     st.session_state.edi_document = document_id
@@ -303,7 +308,7 @@ selected_doc = DOCUMENTS.get(selected_id)
 scope = selected_doc["title"] if selected_doc else "Whole collection"
 questions = selected_doc["questions"] if selected_doc else COLLECTION_QUESTIONS
 
-st.caption("Enterprise Document Intelligence | Local document Q&A")
+st.caption("Enterprise Document Intelligence | Cloud-connected document Q&A")
 st.markdown('<p class="collection-heading">Unilever document collection</p>', unsafe_allow_html=True)
 st.title(selected_doc["title"] if selected_doc else "What would you like to know?")
 st.write(selected_doc["summary"] if selected_doc else COLLECTION_SUMMARY)
@@ -332,7 +337,11 @@ with left, st.container(key="suggestions"):
 with middle:
     st.subheader("Ask a question")
     st.caption(f"Question scope: {scope}")
-    st.caption("Answers run locally and may take 1–3 minutes, sometimes longer.")
+    st.caption(
+        "Questions and selected source passages are sent to Groq to generate answers. "
+        "Do not enter personal or confidential information. "
+        "Free service limits may temporarily prevent answers."
+    )
 
     with st.form("question_form"):
         st.text_area(
@@ -362,7 +371,7 @@ with middle:
                 with st.spinner("Loading the search engine if needed...", show_time=True):
                     engine = load_engine()
 
-                with st.spinner("Searching sources and asking Qwen...", show_time=True):
+                with st.spinner("Searching Neon and generating an answer with Groq...", show_time=True):
                     result = engine.ask(question, document)
 
                 st.session_state.edi_submission["result"] = result
@@ -379,10 +388,11 @@ with middle:
 
         if "error_type" in submission:
             st.error(
-                "The request could not be completed. Check that the Docker database "
-                "and Ollama are running, and that your existing project files, "
-                "packages and cached models are available. If the question is long, "
-                "try shortening it. No answer was saved for this attempt."
+                "The online request could not be completed. Check your internet connection. "
+                "If the service's free allowance has been reached, wait for it to reset. "
+                "If the problem continues, the app owner should check the Neon/Groq "
+                "settings and cached embedding model privately. "
+                "No answer was saved for this attempt."
             )
             st.caption(f"Error type: {submission['error_type']}")
 
@@ -429,7 +439,8 @@ with middle:
 
     st.caption(
         "Answers can be wrong or incomplete, especially comparisons across reports. "
-        "Check the source passages before relying on an answer."
+        "Check source passages, including conditions, dates and exceptions, "
+        "before relying on an answer."
     )
 
 # Keep the complete numbered document list visible for every selection.
@@ -456,4 +467,4 @@ with right, st.container(key="document_list"):
         )
 
 st.divider()
-st.caption("Local prototype | Read-only document search | Not affiliated with Unilever")
+st.caption("Portfolio prototype | Neon read-only search + Groq answers | Not affiliated with Unilever")
