@@ -1,5 +1,7 @@
 """Streamlit interface using Neon search and Groq-hosted source-based answers."""
 
+from uuid import uuid4
+
 import streamlit as st
 
 
@@ -295,11 +297,66 @@ def select_document(document_id):
     st.session_state.edi_document = document_id
     st.session_state.edi_question = ""
     st.session_state.edi_submission = None
+    # Only document navigation requests a scroll, including a repeated selection.
+    st.session_state.edi_scroll_request = uuid4().hex
 
 
 def select_question(question):
     st.session_state.edi_question = question
     st.session_state.edi_submission = None
+
+
+def scroll_to_top_if_requested():
+    """Run once after document navigation, not on normal question/form reruns."""
+    request_id = st.session_state.pop("edi_scroll_request", None)
+    if request_id is None:
+        return
+
+    # Only our generated UUID enters this trusted script. Never insert question,
+    # answer, or source text into executable HTML.
+    st.html(
+        f"""
+        <script>
+        (() => {{
+            const requestId = "{request_id}";
+            if (window.__ediScrollRequest === requestId) return;
+            window.__ediScrollRequest = requestId;
+            let framesRemaining = 60;
+
+            function scrollToOverview() {{
+                // A newer navigation supersedes an earlier pending scroll.
+                if (window.__ediScrollRequest !== requestId) return;
+                const heading = document.getElementById("edi-page-title");
+                if (!heading) {{
+                    if (--framesRemaining > 0) {{
+                        requestAnimationFrame(scrollToOverview);
+                    }}
+                    return;
+                }}
+
+                // Scroll the heading's ancestors, including Streamlit's inner
+                // scrolling container, without relying on private CSS classes.
+                let container = heading.parentElement;
+                while (container) {{
+                    if (container.scrollTop || container.scrollLeft) {{
+                        container.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+                    }}
+                    container = container.parentElement;
+                }}
+                window.scrollTo({{top: 0, left: 0, behavior: "instant"}});
+
+                // Keep keyboard navigation at the new overview as well.
+                heading.setAttribute("tabindex", "-1");
+                heading.focus({{preventScroll: true}});
+            }}
+
+            // Let the new title and overview reach the browser before scrolling.
+            requestAnimationFrame(() => requestAnimationFrame(scrollToOverview));
+        }})();
+        </script>
+        """,
+        unsafe_allow_javascript=True,
+    )
 
 
 # Display either the collection overview or the selected document's overview.
@@ -310,7 +367,10 @@ questions = selected_doc["questions"] if selected_doc else COLLECTION_QUESTIONS
 
 st.caption("Enterprise Document Intelligence | Cloud-connected document Q&A")
 st.markdown('<p class="collection-heading">Unilever document collection</p>', unsafe_allow_html=True)
-st.title(selected_doc["title"] if selected_doc else "What would you like to know?")
+st.title(
+    selected_doc["title"] if selected_doc else "What would you like to know?",
+    anchor="edi-page-title",
+)
 st.write(selected_doc["summary"] if selected_doc else COLLECTION_SUMMARY)
 
 summary_note = (
@@ -468,3 +528,7 @@ with right, st.container(key="document_list"):
 
 st.divider()
 st.caption("Portfolio prototype | Neon read-only search + Groq answers | Not affiliated with Unilever")
+
+# Run after the new view has been rendered. The request is consumed just once.
+scroll_to_top_if_requested()
+
